@@ -66,9 +66,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       (async () => {
         const userId = session?.user?.id ?? null;
+
+        // On token refresh, just update the user - don't re-fetch profile
+        if (event === 'TOKEN_REFRESHED') {
+          setUser(session?.user ?? null);
+          return;
+        }
+
+        // On sign out, clear everything
+        if (event === 'SIGNED_OUT') {
+          setUser(null);
+          setProfile(null);
+          profileIdRef.current = null;
+          setLoading(false);
+          return;
+        }
+
         setUser(session?.user ?? null);
         if (userId) {
           if (profileIdRef.current !== userId) {
