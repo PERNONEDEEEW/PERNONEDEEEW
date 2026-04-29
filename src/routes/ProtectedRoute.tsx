@@ -1,4 +1,4 @@
-import { Navigate, Outlet, useLocation } from 'react-router-dom';
+import { Navigate, Outlet } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 
 interface ProtectedRouteProps {
@@ -7,7 +7,6 @@ interface ProtectedRouteProps {
 
 export function ProtectedRoute({ requiredRole }: ProtectedRouteProps) {
   const { user, profile, initializing, loading } = useAuth();
-  const location = useLocation();
 
   // Wait for initial auth check to complete
   if (initializing) {
@@ -25,10 +24,10 @@ export function ProtectedRoute({ requiredRole }: ProtectedRouteProps) {
       cashier: '/login/cashier',
       customer: '/login/customer',
     };
-    return <Navigate to={loginPath[requiredRole || 'customer']} state={{ from: location }} replace />;
+    return <Navigate to={loginPath[requiredRole || 'customer']} replace />;
   }
 
-  // User exists but profile is still loading - ALWAYS show loading, NEVER redirect
+  // User exists but profile is still loading - ALWAYS show loading, NEVER redirect to login
   if (loading || !profile) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-red-600 via-red-500 to-yellow-400 flex items-center justify-center">
@@ -39,12 +38,12 @@ export function ProtectedRoute({ requiredRole }: ProtectedRouteProps) {
 
   // User and profile loaded - check role
   if (requiredRole && profile.role !== requiredRole) {
-    const redirectPath = {
+    const redirectPath: Record<string, string> = {
       admin: '/admin',
       cashier: '/cashier',
       customer: '/customer',
     };
-    return <Navigate to={redirectPath[profile.role as 'admin' | 'cashier' | 'customer']} replace />;
+    return <Navigate to={redirectPath[profile.role] || '/customer'} replace />;
   }
 
   return <Outlet />;
