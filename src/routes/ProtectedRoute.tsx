@@ -8,7 +8,8 @@ interface ProtectedRouteProps {
 export function ProtectedRoute({ requiredRole }: ProtectedRouteProps) {
   const { user, profile, initializing, loading } = useAuth();
 
-  if (initializing || (user && loading)) {
+  // Wait for initial auth check to complete
+  if (initializing) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-red-600 via-red-500 to-yellow-400 flex items-center justify-center">
         <div className="text-white text-2xl font-bold">Loading...</div>
@@ -16,6 +17,7 @@ export function ProtectedRoute({ requiredRole }: ProtectedRouteProps) {
     );
   }
 
+  // No user at all - redirect to login
   if (!user) {
     const loginPath = {
       admin: '/login/admin',
@@ -25,8 +27,8 @@ export function ProtectedRoute({ requiredRole }: ProtectedRouteProps) {
     return <Navigate to={loginPath[requiredRole || 'customer']} replace />;
   }
 
-  // Wait for profile to load if user exists but profile isn't ready yet
-  if (!profile) {
+  // User exists but profile is still loading - show loading, NOT redirect
+  if (!profile || loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-red-600 via-red-500 to-yellow-400 flex items-center justify-center">
         <div className="text-white text-2xl font-bold">Loading...</div>
@@ -34,6 +36,7 @@ export function ProtectedRoute({ requiredRole }: ProtectedRouteProps) {
     );
   }
 
+  // User and profile loaded - check role
   if (requiredRole && profile.role !== requiredRole) {
     const redirectPath = {
       admin: '/admin',

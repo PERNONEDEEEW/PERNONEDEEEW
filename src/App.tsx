@@ -14,7 +14,7 @@ import { NotFound } from './pages/NotFound';
 import { ProtectedRoute } from './routes/ProtectedRoute';
 
 function App() {
-  const { user, initializing } = useAuth();
+  const { user, profile, initializing } = useAuth();
 
   if (initializing) {
     return (
@@ -56,14 +56,18 @@ function App() {
       <Route
         path="/"
         element={
-          user ? (
-            user.user_metadata?.role === 'admin' ? (
+          user && profile ? (
+            profile.role === 'admin' ? (
               <Navigate to="/admin" replace />
-            ) : user.user_metadata?.role === 'cashier' ? (
+            ) : profile.role === 'cashier' ? (
               <Navigate to="/cashier" replace />
             ) : (
               <Navigate to="/customer" replace />
             )
+          ) : user && !profile ? (
+            <div className="min-h-screen bg-gradient-to-br from-red-600 via-red-500 to-yellow-400 flex items-center justify-center">
+              <div className="text-white text-2xl font-bold">Loading...</div>
+            </div>
           ) : (
             <Navigate to="/login/customer" replace />
           )

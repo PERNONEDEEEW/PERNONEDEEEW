@@ -1,7 +1,7 @@
-import { createContext, useContext, useEffect, useRef, useState } from 'react';
+import { createContext, useContext, useEffect, useRef, useState, useCallback } from 'react';
 import { User } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
-import { Database } from '../lib/database.types';
+import { Database } from './database.types';
 
 type Profile = Database['public']['Tables']['profiles']['Row'];
 
@@ -28,8 +28,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [initializing, setInitializing] = useState(true);
   const profileIdRef = useRef<string | null>(null);
+  const mountedRef = useRef(true);
 
-  const fetchProfile = async (userId: string, retries = 5): Promise<Profile | null> => {
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
+  const fetchProfile = useCallback(async (userId: string, retries = 5): Promise<Profile | null> => {
     try {
       const { data, error } = await supabase
         .from('profiles')
@@ -44,93 +52,115 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return fetchProfile(userId, retries - 1);
       }
 
-      setProfile(data);
-      profileIdRef.current = data?.id ?? null;
+      if (mountedRef.current) {
+        setProfile(data);
+        profileIdRef.current = data?.id ?? null;
+      }
       return data;
     } catch (error) {
       console.error('Error fetching profile:', error);
       return null;
-    } finally {
-      setLoading(false);
     }
-  };
-
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null);
-      if (session?.user) {
-        fetchProfile(session.user.id).finally(() => setInitializing(false));
-      } else {
-        setLoading(false);
-        setInitializing(false);
-      }
-    });
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      (async () => {
-        const userId = session?.user?.id ?? null;
-
-        // On token refresh, just update the user - don't re-fetch profile
-        if (event === 'TOKEN_REFRESHED') {
-          setUser(session?.user ?? null);
-          return;
-        }
-
-        // On sign out, clear everything
-        if (event === 'SIGNED_OUT') {
-          setUser(null);
-          setProfile(null);
-          profileIdRef.current = null;
-          setLoading(false);
-          return;
-        }
-
-        setUser(session?.user ?? null);
-        if (userId) {
-          if (profileIdRef.current !== userId) {
-            await fetchProfile(userId);
-          }
-        } else {
-          setProfile(null);
-          profileIdRef.current = null;
-          setLoading(false);
-        }
-      })();
-    });
-
-    return () => subscription.unsubscribe();
   }, []);
 
+  useEffect(() => {
+    let isMounted = true;
+
+    const initAuth = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+
+        if (!isMounted) return;
+
+        setUser(session?.user ?? null);
+        if (session?.user) {
+          const prof = await fetchProfile(session.user.id);
+          // Only mark initialization complete and loading false after profile is resolved
+          if (isMounted) {
+            if (!prof) {
+              // Profile fetch failed - clear user to force re-login
+              setUser(null);
+              setProfile(null);
+              profileIdRef.current = null;
+            }
+            setLoading(false);
+            setInitializing(false);
+          }
+        } else {
+          setLoading(false);
+          setInitializing(false);
+        }
+      } catch {
+        if (isMounted) {
+          setLoading(false);
+          setInitializing(false);
+        }
+      }
+    };
+
+    initAuth();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (!isMounted) return;
+
+      const userId = session?.user?.id ?? null;
+
+      // On token refresh, just update the user reference - don't touch profile or loading
+      if (event === 'TOKEN_REFRESHED') {
+        setUser(session?.user ?? null);
+        return;
+      }
+
+      // On sign out, clear everything
+      if (event === 'SIGNED_OUT') {
+        setUser(null);
+        setProfile(null);
+        profileIdRef.current = null;
+        setLoading(false);
+        return;
+      }
+
+      // On sign in or other events, update user and fetch profile if needed
+      setUser(session?.user ?? null);
+      if (userId && profileIdRef.current !== userId) {
+        (async () => {
+          const prof = await fetchProfile(userId);
+          if (!isMounted) return;
+          if (!prof) {
+            setUser(null);
+            setProfile(null);
+            profileIdRef.current = null;
+          }
+          setLoading(false);
+        })();
+      }
+    });
+
+    return () => {
+      isMounted = false;
+      subscription.unsubscribe();
+    };
+  }, [fetchProfile]);
+
   const signInCustomer = async (username: string, password: string) => {
-    try {
-      const { data: profileData, error: profileError } = await supabase
-        .from('profiles')
-        .select('email, role')
-        .eq('username', username)
-        .maybeSingle();
+    const { data: profileData, error: profileError } = await supabase
+      .from('profiles')
+      .select('email, role')
+      .eq('username', username)
+      .maybeSingle();
 
-      if (profileError) throw profileError;
-      if (!profileData) {
-        throw new Error('Wrong username');
-      }
+    if (profileError) throw profileError;
+    if (!profileData) throw new Error('Wrong username');
+    if (profileData.role !== 'customer') throw new Error('Invalid credentials for customer login');
 
-      if (profileData.role !== 'customer') {
-        throw new Error('Invalid credentials for customer login');
-      }
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: profileData.email,
+      password,
+    });
+    if (error) throw new Error('Wrong password');
 
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email: profileData.email,
-        password,
-      });
-      if (error) {
-        throw new Error('Wrong password');
-      }
-
-      if (data.user) {
-        await fetchProfile(data.user.id);
-      }
-    } catch (error) {
-      throw error;
+    if (data.user) {
+      await fetchProfile(data.user.id);
     }
   };
 
@@ -138,18 +168,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
-      options: {
-        data: {
-          full_name: fullName,
-          role: 'customer',
-        },
-      },
+      options: { data: { full_name: fullName, role: 'customer' } },
     });
     if (error) throw error;
-
-    if (data.user) {
-      await fetchProfile(data.user.id);
-    }
+    if (data.user) await fetchProfile(data.user.id);
   };
 
   const signUpCustomer = async (username: string, password: string, fullName: string) => {
@@ -161,92 +183,55 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       .eq('username', username)
       .maybeSingle();
 
-    if (existingUser) {
-      throw new Error('Username already exists');
-    }
+    if (existingUser) throw new Error('Username already exists');
 
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
-      options: {
-        data: {
-          username: username,
-          full_name: fullName,
-          role: 'customer',
-        },
-      },
+      options: { data: { username, full_name: fullName, role: 'customer' } },
     });
     if (error) throw error;
-
-    if (data.user) {
-      await fetchProfile(data.user.id);
-    }
+    if (data.user) await fetchProfile(data.user.id);
   };
 
   const signInAdmin = async (username: string, password: string) => {
-    try {
-      const { data: profileData, error: profileError } = await supabase
-        .from('profiles')
-        .select('email, role')
-        .eq('username', username)
-        .maybeSingle();
+    const { data: profileData, error: profileError } = await supabase
+      .from('profiles')
+      .select('email, role')
+      .eq('username', username)
+      .maybeSingle();
 
-      if (profileError) throw profileError;
-      if (!profileData) {
-        throw new Error('Wrong username');
-      }
+    if (profileError) throw profileError;
+    if (!profileData) throw new Error('Wrong username');
+    if (profileData.role !== 'admin') throw new Error('Invalid credentials for admin login');
 
-      if (profileData.role !== 'admin') {
-        throw new Error('Invalid credentials for admin login');
-      }
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: profileData.email,
+      password,
+    });
+    if (error) throw new Error('Wrong password');
 
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email: profileData.email,
-        password,
-      });
-      if (error) {
-        throw new Error('Wrong password');
-      }
-
-      if (data.user) {
-        await fetchProfile(data.user.id);
-      }
-    } catch (error) {
-      throw error;
-    }
+    if (data.user) await fetchProfile(data.user.id);
   };
 
   const signInCashier = async (username: string, password: string) => {
-    try {
-      const { data: profileData, error: profileError } = await supabase
-        .from('profiles')
-        .select('email, role')
-        .eq('username', username)
-        .maybeSingle();
+    const { data: profileData, error: profileError } = await supabase
+      .from('profiles')
+      .select('email, role')
+      .eq('username', username)
+      .maybeSingle();
 
-      if (profileError) throw profileError;
-      if (!profileData) {
-        throw new Error('Wrong username');
-      }
+    if (profileError) throw profileError;
+    if (!profileData) throw new Error('Wrong username');
+    if (profileData.role !== 'cashier') throw new Error('Invalid credentials for cashier login');
 
-      if (profileData.role !== 'cashier') {
-        throw new Error('Invalid credentials for cashier login');
-      }
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: profileData.email,
+      password,
+    });
+    if (error) throw new Error('Wrong password');
 
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email: profileData.email,
-        password,
-      });
-      if (error) {
-        throw new Error('Wrong password');
-      }
-
-      if (data.user) {
-        await fetchProfile(data.user.id);
-      }
-    } catch (error) {
-      throw error;
-    }
+    if (data.user) await fetchProfile(data.user.id);
   };
 
   const signUpAdmin = async (username: string, email: string, password: string, fullName: string) => {
@@ -256,33 +241,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       .eq('username', username)
       .maybeSingle();
 
-    if (existingUser) {
-      throw new Error('Username already exists');
-    }
+    if (existingUser) throw new Error('Username already exists');
 
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
-      options: {
-        data: {
-          username: username,
-          full_name: fullName,
-          role: 'admin',
-        },
-      },
+      options: { data: { username, full_name: fullName, role: 'admin' } },
     });
     if (error) throw error;
-
-    if (data.user) {
-      await fetchProfile(data.user.id);
-    }
+    if (data.user) await fetchProfile(data.user.id);
   };
 
   const signOut = async () => {
     const { error } = await supabase.auth.signOut();
-    if (error) {
-      throw error;
-    }
+    if (error) throw error;
   };
 
   const value = {
