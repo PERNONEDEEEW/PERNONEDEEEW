@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { LogOut, Clock, CheckCircle } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { PendingOrders } from '../components/admin/PendingOrders';
-import { CashierCompleteOrders } from '../components/cashier/CashierCompleteOrders';
+import { CompleteOrders } from '../components/admin/CompleteOrders';
 
 export function CashierPage() {
   const [activeTab, setActiveTab] = useState<'pending' | 'completed'>('pending');
@@ -77,7 +77,7 @@ export function CashierPage() {
         </div>
 
         {activeTab === 'pending' && <PendingOrders />}
-        {activeTab === 'completed' && <CashierCompleteOrders />}
+        {activeTab === 'completed' && <CompleteOrders />}
       </main>
     </div>
   );

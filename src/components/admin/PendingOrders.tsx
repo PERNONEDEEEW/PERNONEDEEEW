@@ -3,7 +3,6 @@ import { supabase } from '../../lib/supabase';
 import { CheckCircle, Clock, Eye, X, Loader } from 'lucide-react';
 import { Database } from '../../lib/database.types';
 import { useToast } from '../../contexts/ToastContext';
-import { useAuth } from '../../contexts/AuthContext';
 
 type Order = Database['public']['Tables']['orders']['Row'];
 
@@ -23,7 +22,6 @@ interface OrderWithDetails extends Order {
 
 export function PendingOrders() {
   const { showToast } = useToast();
-  const { user } = useAuth();
   const [orders, setOrders] = useState<OrderWithDetails[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedOrder, setSelectedOrder] = useState<OrderWithDetails | null>(null);
@@ -77,7 +75,6 @@ export function PendingOrders() {
         .from('orders')
         .update({
           order_status: 'completed',
-          completed_by: user?.id || null,
           updated_at: new Date().toISOString(),
         })
         .eq('id', orderId);
