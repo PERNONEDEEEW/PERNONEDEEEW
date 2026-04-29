@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useRef, useState, useCallback } from 'react';
+import { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { User } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 import { Database } from './database.types';
@@ -27,12 +27,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
   const [initializing, setInitializing] = useState(true);
-  const isFetchingRef = useRef(false);
 
   const fetchProfile = useCallback(async (userId: string, retries = 5): Promise<Profile | null> => {
-    if (isFetchingRef.current) return null;
-    isFetchingRef.current = true;
-
     try {
       for (let attempt = 0; attempt <= retries; attempt++) {
         const { data, error } = await supabase
@@ -53,46 +49,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       }
 
-      // Profile not found after all retries
       setProfile(null);
       return null;
     } catch (error) {
       console.error('Error fetching profile:', error);
       setProfile(null);
       return null;
-    } finally {
-      isFetchingRef.current = false;
     }
   }, []);
-
-  // Load profile whenever user changes
-  useEffect(() => {
-    if (!user) {
-      setProfile(null);
-      return;
-    }
-
-    let cancelled = false;
-
-    const loadProfile = async () => {
-      const prof = await fetchProfile(user.id);
-      if (cancelled) return;
-
-      if (!prof) {
-        // Profile fetch failed after retries - sign out to force re-login
-        console.error('Profile not found for user, signing out');
-        await supabase.auth.signOut();
-      }
-      setLoading(false);
-    };
-
-    setLoading(true);
-    loadProfile();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [user, fetchProfile]);
 
   // Initialize auth and listen for state changes
   useEffect(() => {
@@ -104,12 +68,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (cancelled) return;
 
         setUser(session?.user ?? null);
-        if (!session?.user) {
+        if (session?.user) {
+          const prof = await fetchProfile(session.user.id);
+          if (!cancelled) {
+            if (!prof) {
+              // No profile found - clear user
+              setUser(null);
+              setProfile(null);
+            }
+            setLoading(false);
+            setInitializing(false);
+          }
+        } else {
           setLoading(false);
           setInitializing(false);
         }
-        // If there IS a user, the profile useEffect above will handle it
-        // and set loading=false when done
       } catch {
         if (!cancelled) {
           setLoading(false);
@@ -123,13 +96,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (cancelled) return;
 
-      if (event === 'INITIAL_SESSION') {
-        // Already handled by getSession above
-        return;
-      }
-
       if (event === 'TOKEN_REFRESHED') {
-        // Just update the user reference, don't touch profile or loading
         setUser(session?.user ?? null);
         return;
       }
@@ -138,36 +105,34 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUser(null);
         setProfile(null);
         setLoading(false);
-        setInitializing(false);
         return;
       }
 
       if (event === 'SIGNED_IN') {
-        const userId = session?.user?.id ?? null;
         setUser(session?.user ?? null);
-        // The profile useEffect will detect the user change and fetch profile
-        setInitializing(false);
+        // Fetch profile for the new user
+        const userId = session?.user?.id;
+        if (userId) {
+          (async () => {
+            setLoading(true);
+            const prof = await fetchProfile(userId);
+            if (cancelled) return;
+            if (!prof) {
+              setUser(null);
+              setProfile(null);
+            }
+            setLoading(false);
+          })();
+        }
         return;
       }
-
-      // For any other event, just update user
-      setUser(session?.user ?? null);
     });
 
     return () => {
       cancelled = true;
       subscription.unsubscribe();
     };
-  }, []);
-
-  // Mark initialization complete once we have both user and profile (or no user)
-  useEffect(() => {
-    if (initializing) {
-      if (!user || profile) {
-        setInitializing(false);
-      }
-    }
-  }, [user, profile, initializing]);
+  }, [fetchProfile]);
 
   const signInCustomer = async (username: string, password: string) => {
     const { data: profileData, error: profileError } = await supabase
@@ -190,6 +155,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(data.user);
       const prof = await fetchProfile(data.user.id);
       if (prof) setProfile(prof);
+      setLoading(false);
     }
   };
 
@@ -204,6 +170,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(data.user);
       const prof = await fetchProfile(data.user.id);
       if (prof) setProfile(prof);
+      setLoading(false);
     }
   };
 
@@ -228,6 +195,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(data.user);
       const prof = await fetchProfile(data.user.id);
       if (prof) setProfile(prof);
+      setLoading(false);
     }
   };
 
@@ -252,6 +220,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(data.user);
       const prof = await fetchProfile(data.user.id);
       if (prof) setProfile(prof);
+      setLoading(false);
     }
   };
 
@@ -276,6 +245,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(data.user);
       const prof = await fetchProfile(data.user.id);
       if (prof) setProfile(prof);
+      setLoading(false);
     }
   };
 
@@ -298,6 +268,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(data.user);
       const prof = await fetchProfile(data.user.id);
       if (prof) setProfile(prof);
+      setLoading(false);
     }
   };
 
@@ -327,7 +298,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 export function useAuth() {
   const context = useContext(AuthContext);
   if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider');
+    throw new Error('useAuth must be used within an AuthContext.Provider');
   }
   return context;
 }
