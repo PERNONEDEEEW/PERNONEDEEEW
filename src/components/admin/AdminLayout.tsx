@@ -1,12 +1,13 @@
 import { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
-import { LayoutDashboard, Menu, Package, LogOut, Menu as MenuIcon, X, ClipboardList, Users } from 'lucide-react';
+import { LayoutDashboard, Menu, Package, LogOut, Menu as MenuIcon, X, ClipboardList, Users, TrendingUp } from 'lucide-react';
 import { AdminDashboard } from './AdminDashboard';
 import { MenuManagement } from './MenuManagement';
 import { StockManagement } from './StockManagement';
 import { CashierAccount } from './CashierAccount';
 import { StaffLogs } from './StaffLogs';
+import { NetIncome } from './NetIncome';
 
 export function AdminLayout() {
   const navigate = useNavigate();
@@ -19,6 +20,7 @@ export function AdminLayout() {
     if (location.pathname.includes('/admin/stock')) return 'stock';
     if (location.pathname.includes('/admin/cashier-account')) return 'cashier-account';
     if (location.pathname.includes('/admin/staff-logs')) return 'staff-logs';
+    if (location.pathname.includes('/admin/net-income')) return 'net-income';
     return 'dashboard';
   };
 
@@ -115,8 +117,9 @@ export function AdminLayout() {
                 {navBtn('cashier-account', '/admin/cashier-account', <Users className="w-5 h-5" />, 'Cashier Account')}
               </div>
 
-              <div className="border-t border-gray-200 my-2 pt-2">
+              <div className="border-t border-gray-200 my-2 pt-2 space-y-2">
                 {navBtn('staff-logs', '/admin/staff-logs', <ClipboardList className="w-5 h-5" />, 'Staff Logs')}
+                {navBtn('net-income', '/admin/net-income', <TrendingUp className="w-5 h-5" />, 'Net Income')}
               </div>
             </nav>
           </aside>
@@ -127,6 +130,7 @@ export function AdminLayout() {
             {activeTab === 'stock' && <StockManagement />}
             {activeTab === 'cashier-account' && <CashierAccount />}
             {activeTab === 'staff-logs' && <StaffLogs />}
+            {activeTab === 'net-income' && <NetIncome />}
           </main>
         </div>
       </div>

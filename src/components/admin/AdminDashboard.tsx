@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
-import { TrendingUp, ShoppingBag, Package } from 'lucide-react';
+import { TrendingUp, ShoppingBag, Package, DollarSign } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 interface DashboardStats {
   totalSales: number;
@@ -9,9 +10,12 @@ interface DashboardStats {
   lowStockItems: number;
   todaySales: number;
   todayOrders: number;
+  monthlyNetIncome: number;
+  monthlyCompletedOrders: number;
 }
 
 export function AdminDashboard() {
+  const navigate = useNavigate();
   const [stats, setStats] = useState<DashboardStats>({
     totalSales: 0,
     totalOrders: 0,
@@ -19,6 +23,8 @@ export function AdminDashboard() {
     lowStockItems: 0,
     todaySales: 0,
     todayOrders: 0,
+    monthlyNetIncome: 0,
+    monthlyCompletedOrders: 0,
   });
   const [recentOrders, setRecentOrders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -40,6 +46,16 @@ export function AdminDashboard() {
         .from('menu_items')
         .select('*');
 
+      const now = new Date();
+      const currentMonth = now.getMonth() + 1;
+      const currentYear = now.getFullYear();
+      const { data: monthlyIncome } = await supabase
+        .from('monthly_income')
+        .select('*')
+        .eq('month', currentMonth)
+        .eq('year', currentYear)
+        .maybeSingle();
+
       if (orders) {
         const totalSales = orders.reduce((sum, order) => sum + Number(order.total_amount), 0);
         const pendingOrders = orders.filter(o => o.order_status === 'pending').length;
@@ -54,6 +70,8 @@ export function AdminDashboard() {
           lowStockItems: menuItems?.filter(item => item.stock < 10).length || 0,
           todaySales,
           todayOrders: todayOrders.length,
+          monthlyNetIncome: monthlyIncome ? Number(monthlyIncome.total_income) : 0,
+          monthlyCompletedOrders: monthlyIncome ? monthlyIncome.total_orders : 0,
         });
 
         setRecentOrders(orders.slice(0, 10));
@@ -80,7 +98,15 @@ export function AdminDashboard() {
         <p className="text-gray-600 text-sm sm:text-base">Overview of your restaurant's performance</p>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-6">
+        <StatCard
+          icon={<DollarSign className="w-8 h-8" />}
+          title="Monthly Net Income"
+          value={`₱${stats.monthlyNetIncome.toFixed(2)}`}
+          subtitle={`${stats.monthlyCompletedOrders} completed this month`}
+          color="bg-gradient-to-br from-emerald-500 to-emerald-600"
+          onClick={() => navigate('/admin/net-income')}
+        />
         <StatCard
           icon={<span className="text-3xl font-bold">₱</span>}
           title="Total Sales"
@@ -161,15 +187,19 @@ export function AdminDashboard() {
   );
 }
 
-function StatCard({ icon, title, value, subtitle, color }: {
+function StatCard({ icon, title, value, subtitle, color, onClick }: {
   icon: React.ReactNode;
   title: string;
   value: string;
   subtitle: string;
   color: string;
+  onClick?: () => void;
 }) {
   return (
-    <div className={`${color} text-white rounded-lg sm:rounded-xl p-4 sm:p-6 shadow-lg transform hover:scale-105 transition`}>
+    <div
+      onClick={onClick}
+      className={`${color} text-white rounded-lg sm:rounded-xl p-4 sm:p-6 shadow-lg transform hover:scale-105 transition ${onClick ? 'cursor-pointer' : ''}`}
+    >
       <div className="flex items-center justify-between mb-3 sm:mb-4">
         <div className="text-2xl sm:text-3xl">
           {icon}

@@ -166,6 +166,35 @@ export interface Database {
           logged_in_at?: string
         }
       }
+      monthly_income: {
+        Row: {
+          id: string
+          month: number
+          year: number
+          total_income: number
+          total_orders: number
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          month: number
+          year: number
+          total_income?: number
+          total_orders?: number
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          month?: number
+          year?: number
+          total_income?: number
+          total_orders?: number
+          created_at?: string
+          updated_at?: string
+        }
+      }
     }
   }
 }
