@@ -8,53 +8,54 @@ import { supabase } from '../lib/supabase';
 
 export function CashierPage() {
   const [activeTab, setActiveTab] = useState<'pending' | 'completed'>('pending');
-  const [currentMonthIncome, setCurrentMonthIncome] = useState(0);
-  const [currentMonthOrders, setCurrentMonthOrders] = useState(0);
-  const { profile, signOut } = useAuth();
+  const [myCompletedOrders, setMyCompletedOrders] = useState(0);
+  const [myTotalIncome, setMyTotalIncome] = useState(0);
+  const { profile, user, signOut } = useAuth();
   const navigate = useNavigate();
 
   useEffect(() => {
-    fetchCurrentMonthIncome();
+    fetchMyStats();
 
     const subscription = supabase
-      .channel('cashier-income')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'monthly_income' }, () => {
-        fetchCurrentMonthIncome();
-      })
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'orders' }, () => {
-        fetchCurrentMonthIncome();
+      .channel('cashier-stats')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => {
+        fetchMyStats();
       })
       .subscribe();
 
     return () => {
       subscription.unsubscribe();
     };
-  }, []);
+  }, [user]);
 
-  const fetchCurrentMonthIncome = async () => {
+  const fetchMyStats = async () => {
     try {
+      if (!user) return;
+
       const now = new Date();
       const month = now.getMonth() + 1;
       const year = now.getFullYear();
+      const startOfMonth = new Date(year, month - 1, 1).toISOString();
 
       const { data, error } = await supabase
-        .from('monthly_income')
-        .select('*')
-        .eq('month', month)
-        .eq('year', year)
-        .maybeSingle();
+        .from('orders')
+        .select('total_amount')
+        .eq('completed_by', user.id)
+        .eq('order_status', 'completed')
+        .gte('updated_at', startOfMonth);
 
       if (error) throw error;
 
       if (data) {
-        setCurrentMonthIncome(Number(data.total_income));
-        setCurrentMonthOrders(data.total_orders);
+        const totalIncome = data.reduce((sum, order) => sum + Number(order.total_amount), 0);
+        setMyTotalIncome(totalIncome);
+        setMyCompletedOrders(data.length);
       } else {
-        setCurrentMonthIncome(0);
-        setCurrentMonthOrders(0);
+        setMyTotalIncome(0);
+        setMyCompletedOrders(0);
       }
     } catch (error) {
-      console.error('Error fetching income:', error);
+      console.error('Error fetching cashier stats:', error);
     }
   };
 
@@ -101,7 +102,7 @@ export function CashierPage() {
       </header>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
-        {/* Current Month Income Card */}
+        {/* My Income Card - per cashier */}
         <div className="bg-gradient-to-r from-green-600 to-emerald-500 rounded-2xl shadow-xl p-5 sm:p-6 mb-6 sm:mb-8 text-white">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3 sm:gap-4">
@@ -109,15 +110,15 @@ export function CashierPage() {
                 <TrendingUp className="w-5 h-5 sm:w-7 sm:h-7" />
               </div>
               <div>
-                <p className="text-xs sm:text-sm font-medium opacity-90">Net Income - {monthName} {currentYear}</p>
+                <p className="text-xs sm:text-sm font-medium opacity-90">My Income - {monthName} {currentYear}</p>
                 <p className="text-2xl sm:text-3xl font-bold">
-                  {currentMonthIncome.toLocaleString('en-PH', { style: 'currency', currency: 'PHP' })}
+                  {myTotalIncome.toLocaleString('en-PH', { style: 'currency', currency: 'PHP' })}
                 </p>
               </div>
             </div>
             <div className="text-right">
-              <p className="text-xs opacity-90">Completed Orders</p>
-              <p className="text-xl sm:text-2xl font-bold">{currentMonthOrders}</p>
+              <p className="text-xs opacity-90">My Completed Orders</p>
+              <p className="text-xl sm:text-2xl font-bold">{myCompletedOrders}</p>
             </div>
           </div>
         </div>
@@ -144,12 +145,12 @@ export function CashierPage() {
             }`}
           >
             <CheckCircle className="w-4 h-4 sm:w-5 sm:h-5" />
-            <span>Completed Orders</span>
+            <span>My Completed Orders</span>
           </button>
         </div>
 
         {activeTab === 'pending' && <PendingOrders />}
-        {activeTab === 'completed' && <CompleteOrders />}
+        {activeTab === 'completed' && <CompleteOrders cashierId={user?.id} />}
       </main>
     </div>
   );

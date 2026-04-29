@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
-import { TrendingUp, Calendar, DollarSign, ShoppingBag, ChevronLeft, ChevronRight, Loader } from 'lucide-react';
+import { TrendingUp, Calendar, ShoppingBag, ChevronLeft, ChevronRight, Loader } from 'lucide-react';
 import { Database } from '../../lib/database.types';
 
 type MonthlyIncome = Database['public']['Tables']['monthly_income']['Row'];
@@ -111,7 +111,7 @@ export function NetIncome() {
         <div className="bg-gradient-to-r from-green-600 to-emerald-500 rounded-2xl shadow-xl p-6 sm:p-8 text-white">
           <div className="flex items-center gap-3 mb-4">
             <div className="w-12 h-12 bg-white bg-opacity-20 rounded-xl flex items-center justify-center">
-              <DollarSign className="w-7 h-7" />
+              <span className="text-2xl font-bold">₱</span>
             </div>
             <div>
               <p className="text-sm font-medium opacity-90">This Month's Net Income</p>

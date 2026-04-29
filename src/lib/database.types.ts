@@ -13,21 +13,24 @@ export interface Database {
         Row: {
           id: string
           email: string
-          role: 'admin' | 'customer'
+          username: string | null
+          role: 'admin' | 'customer' | 'cashier'
           full_name: string | null
           created_at: string
         }
         Insert: {
           id: string
           email: string
-          role?: 'admin' | 'customer'
+          username?: string | null
+          role?: 'admin' | 'customer' | 'cashier'
           full_name?: string | null
           created_at?: string
         }
         Update: {
           id?: string
           email?: string
-          role?: 'admin' | 'customer'
+          username?: string | null
+          role?: 'admin' | 'customer' | 'cashier'
           full_name?: string | null
           created_at?: string
         }
@@ -82,6 +85,7 @@ export interface Database {
           payment_url: string | null
           payment_reference: string | null
           payment_completed_at: string | null
+          completed_by: string | null
           created_at: string
           updated_at: string
         }
@@ -96,6 +100,7 @@ export interface Database {
           payment_url?: string | null
           payment_reference?: string | null
           payment_completed_at?: string | null
+          completed_by?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -110,6 +115,7 @@ export interface Database {
           payment_url?: string | null
           payment_reference?: string | null
           payment_completed_at?: string | null
+          completed_by?: string | null
           created_at?: string
           updated_at?: string
         }

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
-import { TrendingUp, ShoppingBag, Package, DollarSign } from 'lucide-react';
+import { TrendingUp, ShoppingBag, Package } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 interface DashboardStats {
@@ -100,7 +100,7 @@ export function AdminDashboard() {
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-6">
         <StatCard
-          icon={<DollarSign className="w-8 h-8" />}
+          icon={<span className="text-3xl font-bold">₱</span>}
           title="Monthly Net Income"
           value={`₱${stats.monthlyNetIncome.toFixed(2)}`}
           subtitle={`${stats.monthlyCompletedOrders} completed this month`}

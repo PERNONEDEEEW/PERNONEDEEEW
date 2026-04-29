@@ -27,7 +27,11 @@ interface SalesReport {
   totalSales: number;
 }
 
-export function CompleteOrders() {
+interface CompleteOrdersProps {
+  cashierId?: string;
+}
+
+export function CompleteOrders({ cashierId }: CompleteOrdersProps) {
   const [orders, setOrders] = useState<OrderWithDetails[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedOrder, setSelectedOrder] = useState<OrderWithDetails | null>(null);
@@ -48,11 +52,11 @@ export function CompleteOrders() {
     return () => {
       subscription.unsubscribe();
     };
-  }, []);
+  }, [cashierId]);
 
   const fetchCompleteOrders = async () => {
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from('orders')
         .select(`
           *,
@@ -64,7 +68,13 @@ export function CompleteOrders() {
             menu_items(name)
           )
         `)
-        .eq('order_status', 'completed')
+        .eq('order_status', 'completed');
+
+      if (cashierId) {
+        query = query.eq('completed_by', cashierId);
+      }
+
+      const { data, error } = await query
         .order('created_at', { ascending: false });
 
       if (error) throw error;
