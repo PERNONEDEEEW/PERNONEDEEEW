@@ -1,16 +1,17 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
-import { ClipboardList, Search, X, Loader, User, Calendar, Clock } from 'lucide-react';
+import { ClipboardList, Search, X, Loader, User, Calendar, Clock, UserCheck } from 'lucide-react';
 
 interface StaffLog {
   id: string;
   admin_id: string;
   staff_name: string;
   admin_username: string;
+  cashier_username: string;
   logged_in_at: string;
 }
 
-export function StaffLogs() {
+export function CashierLogs() {
   const [logs, setLogs] = useState<StaffLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -41,7 +42,7 @@ export function StaffLogs() {
       if (error) throw error;
       setLogs(data || []);
     } catch (err) {
-      console.error('Error fetching staff logs:', err);
+      console.error('Error fetching cashier logs:', err);
     } finally {
       setLoading(false);
     }
@@ -55,6 +56,7 @@ export function StaffLogs() {
       filtered = filtered.filter(
         (log) =>
           log.staff_name.toLowerCase().includes(q) ||
+          log.cashier_username.toLowerCase().includes(q) ||
           log.admin_username.toLowerCase().includes(q)
       );
     }
@@ -89,7 +91,7 @@ export function StaffLogs() {
 
   const filteredLogs = getFilteredLogs();
 
-  const uniqueStaff = new Set(logs.map((l) => l.staff_name)).size;
+  const uniqueCashiers = new Set(logs.map((l) => l.staff_name)).size;
   const todayCount = logs.filter((l) => {
     const now = new Date();
     const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -116,8 +118,8 @@ export function StaffLogs() {
     <div className="space-y-4 sm:space-y-6">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <div>
-          <h2 className="text-2xl sm:text-3xl font-bold text-gray-800 mb-1">Staff Logs</h2>
-          <p className="text-gray-600 text-sm sm:text-base">Track who accessed the admin panel</p>
+          <h2 className="text-2xl sm:text-3xl font-bold text-gray-800 mb-1">Cashier Logs</h2>
+          <p className="text-gray-600 text-sm sm:text-base">Track cashier login activity</p>
         </div>
         <div className="flex items-center gap-2 bg-slate-100 text-slate-700 px-4 py-2 rounded-xl font-semibold text-sm">
           <ClipboardList className="w-4 h-4" />
@@ -144,9 +146,9 @@ export function StaffLogs() {
         <div className="bg-gradient-to-br from-green-500 to-green-600 text-white rounded-xl shadow-lg p-5">
           <div className="flex items-center gap-3 mb-2">
             <User className="w-6 h-6 opacity-80" />
-            <span className="text-sm font-medium opacity-80">Unique Staff</span>
+            <span className="text-sm font-medium opacity-80">Unique Cashiers</span>
           </div>
-          <p className="text-4xl font-bold">{uniqueStaff}</p>
+          <p className="text-4xl font-bold">{uniqueCashiers}</p>
         </div>
       </div>
 
@@ -157,7 +159,7 @@ export function StaffLogs() {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
             <input
               type="text"
-              placeholder="Search by staff name or admin username..."
+              placeholder="Search by cashier name or username..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full pl-10 pr-10 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
@@ -197,7 +199,7 @@ export function StaffLogs() {
           <p className="text-gray-500">
             {searchQuery || dateFilter !== 'all'
               ? 'No entries match your filters.'
-              : 'Staff activity will be recorded here once someone logs in.'}
+              : 'Cashier login activity will be recorded here once a cashier logs in.'}
           </p>
         </div>
       ) : (
@@ -207,8 +209,9 @@ export function StaffLogs() {
               <thead className="bg-gray-50 border-b border-gray-200">
                 <tr>
                   <th className="text-left py-4 px-6 text-sm font-semibold text-gray-700">#</th>
-                  <th className="text-left py-4 px-6 text-sm font-semibold text-gray-700">Staff Name</th>
-                  <th className="text-left py-4 px-6 text-sm font-semibold text-gray-700">Admin Account</th>
+                  <th className="text-left py-4 px-6 text-sm font-semibold text-gray-700">Cashier Name</th>
+                  <th className="text-left py-4 px-6 text-sm font-semibold text-gray-700">Username</th>
+                  <th className="text-left py-4 px-6 text-sm font-semibold text-gray-700">Role</th>
                   <th className="text-left py-4 px-6 text-sm font-semibold text-gray-700">Date</th>
                   <th className="text-left py-4 px-6 text-sm font-semibold text-gray-700">Time</th>
                 </tr>
@@ -216,6 +219,7 @@ export function StaffLogs() {
               <tbody>
                 {filteredLogs.map((log, index) => {
                   const { date, time } = formatDateTime(log.logged_in_at);
+                  const isCashier = log.cashier_username && log.cashier_username !== '';
                   return (
                     <tr key={log.id} className="border-b border-gray-100 hover:bg-gray-50 transition">
                       <td className="py-4 px-6 text-sm text-gray-500 font-medium">
@@ -223,15 +227,33 @@ export function StaffLogs() {
                       </td>
                       <td className="py-4 px-6">
                         <div className="flex items-center gap-3">
-                          <div className="w-9 h-9 bg-gradient-to-br from-slate-600 to-slate-700 rounded-full flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
+                          <div className={`w-9 h-9 rounded-full flex items-center justify-center text-white font-bold text-sm flex-shrink-0 ${
+                            isCashier
+                              ? 'bg-gradient-to-br from-emerald-500 to-emerald-600'
+                              : 'bg-gradient-to-br from-slate-600 to-slate-700'
+                          }`}>
                             {log.staff_name.charAt(0).toUpperCase()}
                           </div>
                           <span className="font-semibold text-gray-800">{log.staff_name}</span>
                         </div>
                       </td>
                       <td className="py-4 px-6">
-                        <span className="px-3 py-1 bg-slate-100 text-slate-700 rounded-full text-xs font-semibold">
-                          @{log.admin_username}
+                        <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
+                          isCashier
+                            ? 'bg-emerald-100 text-emerald-700'
+                            : 'bg-slate-100 text-slate-700'
+                        }`}>
+                          @{isCashier ? log.cashier_username : log.admin_username}
+                        </span>
+                      </td>
+                      <td className="py-4 px-6">
+                        <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold ${
+                          isCashier
+                            ? 'bg-emerald-100 text-emerald-700'
+                            : 'bg-slate-100 text-slate-700'
+                        }`}>
+                          {isCashier ? <UserCheck className="w-3 h-3" /> : <User className="w-3 h-3" />}
+                          {isCashier ? 'Cashier' : 'Admin'}
                         </span>
                       </td>
                       <td className="py-4 px-6">

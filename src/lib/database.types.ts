@@ -149,6 +149,7 @@ export interface Database {
           admin_id: string
           staff_name: string
           admin_username: string
+          cashier_username: string
           logged_in_at: string
         }
         Insert: {
@@ -156,6 +157,7 @@ export interface Database {
           admin_id: string
           staff_name: string
           admin_username?: string
+          cashier_username?: string
           logged_in_at?: string
         }
         Update: {
@@ -163,6 +165,7 @@ export interface Database {
           admin_id?: string
           staff_name?: string
           admin_username?: string
+          cashier_username?: string
           logged_in_at?: string
         }
       }

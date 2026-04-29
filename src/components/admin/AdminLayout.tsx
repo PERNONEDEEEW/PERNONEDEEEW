@@ -6,7 +6,7 @@ import { AdminDashboard } from './AdminDashboard';
 import { MenuManagement } from './MenuManagement';
 import { StockManagement } from './StockManagement';
 import { CashierAccount } from './CashierAccount';
-import { StaffLogs } from './StaffLogs';
+import { CashierLogs } from './StaffLogs';
 import { NetIncome } from './NetIncome';
 
 export function AdminLayout() {
@@ -19,7 +19,7 @@ export function AdminLayout() {
     if (location.pathname.includes('/admin/menu')) return 'menu';
     if (location.pathname.includes('/admin/stock')) return 'stock';
     if (location.pathname.includes('/admin/cashier-account')) return 'cashier-account';
-    if (location.pathname.includes('/admin/staff-logs')) return 'staff-logs';
+    if (location.pathname.includes('/admin/cashier-logs')) return 'cashier-logs';
     if (location.pathname.includes('/admin/net-income')) return 'net-income';
     return 'dashboard';
   };
@@ -118,7 +118,7 @@ export function AdminLayout() {
               </div>
 
               <div className="border-t border-gray-200 my-2 pt-2 space-y-2">
-                {navBtn('staff-logs', '/admin/staff-logs', <ClipboardList className="w-5 h-5" />, 'Staff Logs')}
+                {navBtn('cashier-logs', '/admin/cashier-logs', <ClipboardList className="w-5 h-5" />, 'Cashier Logs')}
                 {navBtn('net-income', '/admin/net-income', <TrendingUp className="w-5 h-5" />, 'Net Income')}
               </div>
             </nav>
@@ -129,7 +129,7 @@ export function AdminLayout() {
             {activeTab === 'menu' && <MenuManagement />}
             {activeTab === 'stock' && <StockManagement />}
             {activeTab === 'cashier-account' && <CashierAccount />}
-            {activeTab === 'staff-logs' && <StaffLogs />}
+            {activeTab === 'cashier-logs' && <CashierLogs />}
             {activeTab === 'net-income' && <NetIncome />}
           </main>
         </div>

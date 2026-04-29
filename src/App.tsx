@@ -37,6 +37,7 @@ function App() {
         <Route path="/admin/menu" element={<AdminPage />} />
         <Route path="/admin/stock" element={<AdminPage />} />
         <Route path="/admin/staff-logs" element={<AdminPage />} />
+        <Route path="/admin/cashier-logs" element={<AdminPage />} />
         <Route path="/admin/cashier-account" element={<AdminPage />} />
         <Route path="/admin/net-income" element={<AdminPage />} />
       </Route>

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
+import { supabase } from '../lib/supabase';
 
 export function CashierSignIn() {
   const [username, setUsername] = useState('');
@@ -21,6 +22,26 @@ export function CashierSignIn() {
 
     try {
       await signInCashier(username, password);
+
+      // Log the cashier login to staff_logs
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const { data: profileData } = await supabase
+          .from('profiles')
+          .select('full_name, username')
+          .eq('id', user.id)
+          .maybeSingle();
+
+        if (profileData) {
+          await supabase.from('staff_logs').insert({
+            admin_id: user.id,
+            staff_name: profileData.full_name || username,
+            admin_username: '',
+            cashier_username: profileData.username || username,
+          });
+        }
+      }
+
       showToast('success', 'Welcome!');
       navigate('/cashier');
     } catch (err: unknown) {
