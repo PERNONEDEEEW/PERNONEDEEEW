@@ -1,4 +1,4 @@
-import { Navigate, Outlet } from 'react-router-dom';
+import { Navigate, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 
 interface ProtectedRouteProps {
@@ -7,6 +7,7 @@ interface ProtectedRouteProps {
 
 export function ProtectedRoute({ requiredRole }: ProtectedRouteProps) {
   const { user, profile, initializing, loading } = useAuth();
+  const location = useLocation();
 
   // Wait for initial auth check to complete
   if (initializing) {
@@ -17,18 +18,18 @@ export function ProtectedRoute({ requiredRole }: ProtectedRouteProps) {
     );
   }
 
-  // No user at all - redirect to login
+  // No user session at all - redirect to login
   if (!user) {
     const loginPath = {
       admin: '/login/admin',
       cashier: '/login/cashier',
       customer: '/login/customer',
     };
-    return <Navigate to={loginPath[requiredRole || 'customer']} replace />;
+    return <Navigate to={loginPath[requiredRole || 'customer']} state={{ from: location }} replace />;
   }
 
-  // User exists but profile is still loading - show loading, NOT redirect
-  if (!profile || loading) {
+  // User exists but profile is still loading - ALWAYS show loading, NEVER redirect
+  if (loading || !profile) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-red-600 via-red-500 to-yellow-400 flex items-center justify-center">
         <div className="text-white text-2xl font-bold">Loading...</div>

@@ -27,71 +27,91 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
   const [initializing, setInitializing] = useState(true);
-  const profileIdRef = useRef<string | null>(null);
-  const mountedRef = useRef(true);
-
-  useEffect(() => {
-    mountedRef.current = true;
-    return () => {
-      mountedRef.current = false;
-    };
-  }, []);
+  const isFetchingRef = useRef(false);
 
   const fetchProfile = useCallback(async (userId: string, retries = 5): Promise<Profile | null> => {
+    if (isFetchingRef.current) return null;
+    isFetchingRef.current = true;
+
     try {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', userId)
-        .maybeSingle();
+      for (let attempt = 0; attempt <= retries; attempt++) {
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', userId)
+          .maybeSingle();
 
-      if (error) throw error;
+        if (error) throw error;
 
-      if (!data && retries > 0) {
-        await new Promise(r => setTimeout(r, 300));
-        return fetchProfile(userId, retries - 1);
+        if (data) {
+          setProfile(data);
+          return data;
+        }
+
+        if (attempt < retries) {
+          await new Promise(r => setTimeout(r, 300));
+        }
       }
 
-      if (mountedRef.current) {
-        setProfile(data);
-        profileIdRef.current = data?.id ?? null;
-      }
-      return data;
+      // Profile not found after all retries
+      setProfile(null);
+      return null;
     } catch (error) {
       console.error('Error fetching profile:', error);
+      setProfile(null);
       return null;
+    } finally {
+      isFetchingRef.current = false;
     }
   }, []);
 
+  // Load profile whenever user changes
   useEffect(() => {
-    let isMounted = true;
+    if (!user) {
+      setProfile(null);
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadProfile = async () => {
+      const prof = await fetchProfile(user.id);
+      if (cancelled) return;
+
+      if (!prof) {
+        // Profile fetch failed after retries - sign out to force re-login
+        console.error('Profile not found for user, signing out');
+        await supabase.auth.signOut();
+      }
+      setLoading(false);
+    };
+
+    setLoading(true);
+    loadProfile();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user, fetchProfile]);
+
+  // Initialize auth and listen for state changes
+  useEffect(() => {
+    let cancelled = false;
 
     const initAuth = async () => {
       try {
         const { data: { session } } = await supabase.auth.getSession();
-
-        if (!isMounted) return;
+        if (cancelled) return;
 
         setUser(session?.user ?? null);
-        if (session?.user) {
-          const prof = await fetchProfile(session.user.id);
-          // Only mark initialization complete and loading false after profile is resolved
-          if (isMounted) {
-            if (!prof) {
-              // Profile fetch failed - clear user to force re-login
-              setUser(null);
-              setProfile(null);
-              profileIdRef.current = null;
-            }
-            setLoading(false);
-            setInitializing(false);
-          }
-        } else {
+        if (!session?.user) {
           setLoading(false);
           setInitializing(false);
         }
+        // If there IS a user, the profile useEffect above will handle it
+        // and set loading=false when done
       } catch {
-        if (isMounted) {
+        if (!cancelled) {
           setLoading(false);
           setInitializing(false);
         }
@@ -101,46 +121,53 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     initAuth();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (!isMounted) return;
+      if (cancelled) return;
 
-      const userId = session?.user?.id ?? null;
+      if (event === 'INITIAL_SESSION') {
+        // Already handled by getSession above
+        return;
+      }
 
-      // On token refresh, just update the user reference - don't touch profile or loading
       if (event === 'TOKEN_REFRESHED') {
+        // Just update the user reference, don't touch profile or loading
         setUser(session?.user ?? null);
         return;
       }
 
-      // On sign out, clear everything
       if (event === 'SIGNED_OUT') {
         setUser(null);
         setProfile(null);
-        profileIdRef.current = null;
         setLoading(false);
+        setInitializing(false);
         return;
       }
 
-      // On sign in or other events, update user and fetch profile if needed
-      setUser(session?.user ?? null);
-      if (userId && profileIdRef.current !== userId) {
-        (async () => {
-          const prof = await fetchProfile(userId);
-          if (!isMounted) return;
-          if (!prof) {
-            setUser(null);
-            setProfile(null);
-            profileIdRef.current = null;
-          }
-          setLoading(false);
-        })();
+      if (event === 'SIGNED_IN') {
+        const userId = session?.user?.id ?? null;
+        setUser(session?.user ?? null);
+        // The profile useEffect will detect the user change and fetch profile
+        setInitializing(false);
+        return;
       }
+
+      // For any other event, just update user
+      setUser(session?.user ?? null);
     });
 
     return () => {
-      isMounted = false;
+      cancelled = true;
       subscription.unsubscribe();
     };
-  }, [fetchProfile]);
+  }, []);
+
+  // Mark initialization complete once we have both user and profile (or no user)
+  useEffect(() => {
+    if (initializing) {
+      if (!user || profile) {
+        setInitializing(false);
+      }
+    }
+  }, [user, profile, initializing]);
 
   const signInCustomer = async (username: string, password: string) => {
     const { data: profileData, error: profileError } = await supabase
@@ -160,7 +187,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (error) throw new Error('Wrong password');
 
     if (data.user) {
-      await fetchProfile(data.user.id);
+      setUser(data.user);
+      const prof = await fetchProfile(data.user.id);
+      if (prof) setProfile(prof);
     }
   };
 
@@ -171,7 +200,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       options: { data: { full_name: fullName, role: 'customer' } },
     });
     if (error) throw error;
-    if (data.user) await fetchProfile(data.user.id);
+    if (data.user) {
+      setUser(data.user);
+      const prof = await fetchProfile(data.user.id);
+      if (prof) setProfile(prof);
+    }
   };
 
   const signUpCustomer = async (username: string, password: string, fullName: string) => {
@@ -191,7 +224,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       options: { data: { username, full_name: fullName, role: 'customer' } },
     });
     if (error) throw error;
-    if (data.user) await fetchProfile(data.user.id);
+    if (data.user) {
+      setUser(data.user);
+      const prof = await fetchProfile(data.user.id);
+      if (prof) setProfile(prof);
+    }
   };
 
   const signInAdmin = async (username: string, password: string) => {
@@ -211,7 +248,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
     if (error) throw new Error('Wrong password');
 
-    if (data.user) await fetchProfile(data.user.id);
+    if (data.user) {
+      setUser(data.user);
+      const prof = await fetchProfile(data.user.id);
+      if (prof) setProfile(prof);
+    }
   };
 
   const signInCashier = async (username: string, password: string) => {
@@ -231,7 +272,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
     if (error) throw new Error('Wrong password');
 
-    if (data.user) await fetchProfile(data.user.id);
+    if (data.user) {
+      setUser(data.user);
+      const prof = await fetchProfile(data.user.id);
+      if (prof) setProfile(prof);
+    }
   };
 
   const signUpAdmin = async (username: string, email: string, password: string, fullName: string) => {
@@ -249,7 +294,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       options: { data: { username, full_name: fullName, role: 'admin' } },
     });
     if (error) throw error;
-    if (data.user) await fetchProfile(data.user.id);
+    if (data.user) {
+      setUser(data.user);
+      const prof = await fetchProfile(data.user.id);
+      if (prof) setProfile(prof);
+    }
   };
 
   const signOut = async () => {
